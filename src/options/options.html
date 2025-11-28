@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Square Search AI - Settings</title>
+    <link rel="stylesheet" href="options.css" />
+    <script type="module" src="options.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1>Square Search AI Settings</h1>
+      <form id="settingsForm">
+        <fieldset>
+          <legend>Gemini Vision</legend>
+          <label>
+            API Key
+            <input
+              id="geminiKey"
+              type="password"
+              placeholder="Enter your Gemini API key"
+            />
+          </label>
+          <label>
+            Model
+            <input
+              id="geminiModel"
+              type="text"
+              placeholder="gemini-2.5-flash"
+            />
+          </label>
+        </fieldset>
+
+        <div class="buttons">
+          <button id="saveButton" type="submit">Save Settings</button>
+          <button id="resetButton" type="button">Reset to Defaults</button>
+        </div>
+      </form>
+      <section class="shortcut-section">
+        <h2>Keyboard Shortcuts</h2>
+        <p class="subtitle">
+          Customize the combo per platform (format example:
+          <code>Ctrl+Shift+S</code>)
+        </p>
+        <div class="shortcut-grid">
+          <label>
+            macOS
+            <input id="shortcutMac" type="text" placeholder="Command+Shift+S" />
+          </label>
+          <label>
+            Windows
+            <input
+              id="shortcutWindows"
+              type="text"
+              placeholder="Ctrl+Shift+S"
+            />
+          </label>
+          <label>
+            Linux
+            <input id="shortcutLinux" type="text" placeholder="Ctrl+Shift+S" />
+          </label>
+        </div>
+      </section>
+      <p id="statusText"></p>
+    </main>
+  </body>
+</html>
