@@ -188,7 +188,8 @@
   class SidePanel {
     constructor() {
       this.root = null;
-      this.resultEl = null;
+      this.resultAIEl = null;
+      this.resultWebEl = null;
       this.statusEl = null;
       this.previewImg = null;
       this.promptInput = null;
@@ -196,6 +197,8 @@
       this.collapseButton = null;
       this.googleButton = null;
       this.googleHandler = null;
+      this.tabButtons = {};
+      this.activeTab = "ai";
       this.closeButton = null;
       this.objectUrl = null;
       this.isVisible = false;
@@ -256,9 +259,24 @@
       this.statusEl.className = "square-search-panel__status";
       this.statusEl.textContent = "Select an area to begin.";
 
-      this.resultEl = document.createElement("div");
-      this.resultEl.className = "square-search-panel__result";
-      this.resultEl.textContent = "Your answers will appear here.";
+      const tabs = document.createElement("div");
+      tabs.className = "square-search-panel__tabs";
+      this.tabButtons.ai = this.buildTabButton("AI", "ai");
+      this.tabButtons.web = this.buildTabButton("Web", "web");
+      tabs.append(this.tabButtons.ai, this.tabButtons.web);
+
+      const resultsContainer = document.createElement("div");
+      resultsContainer.className = "square-search-panel__results";
+      this.resultAIEl = document.createElement("div");
+      this.resultAIEl.className =
+        "square-search-panel__result square-search-panel__result--ai";
+      this.resultAIEl.textContent = "Your Gemini answers will appear here.";
+      this.resultWebEl = document.createElement("div");
+      this.resultWebEl.className =
+        "square-search-panel__result square-search-panel__result--web";
+      this.resultWebEl.textContent =
+        "Add a Google Cloud Vision API key in options to see related web matches.";
+      resultsContainer.append(this.resultAIEl, this.resultWebEl);
 
       const promptLabel = document.createElement("label");
       promptLabel.className = "square-search-panel__prompt-label";
@@ -284,13 +302,15 @@
         previewContainer,
         previewActions,
         this.statusEl,
-        this.resultEl,
+        tabs,
+        resultsContainer,
         promptLabel,
         this.runButton
       );
 
       this.root.append(header, body);
       document.body.appendChild(this.root);
+      this.setActiveTab("ai");
       this.updateToggleLabel();
     }
 
@@ -328,19 +348,126 @@
       this.statusEl.textContent = message;
     }
 
-    setResult(message) {
-      this.resultEl.classList.remove("is-error");
-      const html = MarkdownRenderer.render(message || "");
-      if (html) {
-        this.resultEl.innerHTML = html;
-      } else {
-        this.resultEl.textContent = "No details were returned for this area.";
+    buildTabButton(label, key) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "square-search-panel__tab";
+      button.textContent = label;
+      button.addEventListener("click", () => this.setActiveTab(key));
+      return button;
+    }
+
+    setActiveTab(key) {
+      this.activeTab = key;
+      Object.entries(this.tabButtons).forEach(([tabKey, btn]) => {
+        if (!btn) {
+          return;
+        }
+        const isActive = tabKey === key;
+        btn.classList.toggle("is-active", isActive);
+      });
+      if (this.resultAIEl && this.resultWebEl) {
+        this.resultAIEl.classList.toggle("is-inactive", key !== "ai");
+        this.resultAIEl.classList.toggle("is-active", key === "ai");
+        this.resultWebEl.classList.toggle("is-inactive", key !== "web");
+        this.resultWebEl.classList.toggle("is-active", key === "web");
       }
     }
 
-    setError(message) {
-      this.resultEl.classList.add("is-error");
-      this.resultEl.textContent = message;
+    setAIResult(message) {
+      this.resultAIEl.classList.remove("is-error");
+      const html = MarkdownRenderer.render(message || "");
+      if (html) {
+        this.resultAIEl.innerHTML = html;
+      } else {
+        this.resultAIEl.textContent =
+          "No details were returned for this area.";
+      }
+    }
+
+    setAIError(message) {
+      this.resultAIEl.classList.add("is-error");
+      this.resultAIEl.textContent = message;
+    }
+
+    setWebLoading(isLoading) {
+      if (!this.resultWebEl) {
+        return;
+      }
+      this.resultWebEl.classList.toggle("is-loading", isLoading);
+      if (isLoading) {
+        this.resultWebEl.classList.remove("is-error");
+        this.resultWebEl.innerHTML =
+          '<p class="square-search-panel__web-status">Searching the web for matches…</p>';
+      }
+    }
+
+    setWebResult(result) {
+      if (!this.resultWebEl) {
+        return;
+      }
+      this.resultWebEl.classList.remove("is-error", "is-loading");
+      const sections = [];
+      if (result?.bestGuesses?.length) {
+        sections.push(
+          `<div class="square-search-panel__web-section"><h3>Best guesses</h3><ul class="square-search-panel__web-list">${result.bestGuesses
+            .map((label) => `<li>${SidePanel.escapeHtml(label)}</li>`)
+            .join("")}</ul></div>`
+        );
+      }
+      if (result?.pages?.length) {
+        const topPages = result.pages.slice(0, 4);
+        sections.push(
+          `<div class="square-search-panel__web-section"><h3>Pages with matches</h3><ul class="square-search-panel__web-list">${topPages
+            .map(
+              (page) =>
+                `<li><a href="${SidePanel.escapeAttr(page.url)}" target="_blank" rel="noopener noreferrer">${SidePanel.escapeHtml(
+                  page.title || page.url
+                )}</a></li>`
+            )
+            .join("")}</ul></div>`
+        );
+      }
+      if (result?.entities?.length) {
+        const topEntities = result.entities.slice(0, 4);
+        sections.push(
+          `<div class="square-search-panel__web-section"><h3>Web entities</h3><ul class="square-search-panel__web-list">${topEntities
+            .map(
+              (entity) =>
+                `<li>${SidePanel.escapeHtml(entity.description)}<span class="square-search-panel__web-meta">${Math.round(
+                  (entity.score || 0) * 100
+                ) / 100}</span></li>`
+            )
+            .join("")}</ul></div>`
+        );
+      }
+      if (!sections.length) {
+        this.resultWebEl.textContent = "No related web matches found.";
+        return;
+      }
+      this.resultWebEl.innerHTML = sections.join("");
+    }
+
+    setWebError(message) {
+      if (!this.resultWebEl) {
+        return;
+      }
+      this.resultWebEl.classList.add("is-error");
+      this.resultWebEl.classList.remove("is-loading");
+      this.resultWebEl.textContent = message;
+    }
+
+    static escapeHtml(value = "") {
+      return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    static escapeAttr(value = "") {
+      return SidePanel.escapeHtml(value);
     }
 
     close() {
@@ -402,8 +529,10 @@
       this.panel = new SidePanel();
       this.overlay = null;
       this.croppedBlob = null;
+      this.croppedBase64 = null;
       this.imageUtils = null;
       this.modelClient = null;
+      this.webClient = null;
       this.storage = null;
       this.registerMessageHandlers();
       this.panel.onRun((prompt) => this.runSearch(prompt));
@@ -423,6 +552,8 @@
         this.panel.setStatus("Selection cancelled.");
         return;
       }
+      this.croppedBlob = null;
+      this.croppedBase64 = null;
       this.panel.open();
       this.panel.setGoogleAvailable(false);
       this.panel.setStatus("Capturing selection…");
@@ -433,7 +564,7 @@
         });
       } catch (error) {
         console.error("Capture request failed", error);
-        this.panel.setError("Unable to capture this page. Try again.");
+        this.panel.setAIError("Unable to capture this page. Try again.");
       }
     }
 
@@ -442,7 +573,7 @@
         if (message?.type === "SQUARE_SEARCH_SHOW_RESULTS") {
           this.handleCapturedData().catch((error) => {
             console.error("Failed to process capture", error);
-            this.panel.setError(
+            this.panel.setAIError(
               "Something went wrong while preparing the image."
             );
           });
@@ -457,23 +588,25 @@
         storage.getLocal("capturedRegion"),
       ]);
       if (!imageDataUrl || !region) {
-        this.panel.setError("Captured data not found. Please try again.");
+        this.panel.setAIError("Captured data not found. Please try again.");
         return;
       }
       const ImageUtils = await this.getImageUtils();
       const img = await ImageUtils.loadImageFromDataUrl(imageDataUrl);
       const scaled = this.scaleRegion(region, img);
       this.croppedBlob = await ImageUtils.cropImageToBlob(img, scaled);
+      this.croppedBase64 = await ImageUtils.blobToBase64(this.croppedBlob);
       await storage.removeLocal(["capturedImage", "capturedRegion"]);
       await this.panel.setPreview(this.croppedBlob);
       this.panel.setStatus("Ask anything about this selection.");
       this.panel.setGoogleAvailable(true);
       await this.runSearch(this.panel.getPrompt());
+      this.runWebSearch();
     }
 
     async runSearch(promptText) {
       if (!this.croppedBlob) {
-        this.panel.setError("Select an area before running a search.");
+        this.panel.setAIError("Select an area before running a search.");
         return;
       }
       const ModelClient = await this.getModelClient();
@@ -486,30 +619,61 @@
         );
         const answer =
           result?.text?.trim() || "No details were returned for this area.";
-        this.panel.setResult(answer);
+        this.panel.setAIResult(answer);
         this.panel.setStatus("Result updated.");
       } catch (error) {
         console.error("Model call failed", error);
-        this.panel.setError(error.message || "Unable to fetch a response.");
+        this.panel.setAIError(error.message || "Unable to fetch a response.");
         this.panel.setStatus("Please adjust your selection or prompt.");
       } finally {
         this.panel.setLoading(false);
       }
     }
 
-    async searchOnGoogle() {
-      if (!this.croppedBlob) {
-        this.panel.setError("Select an area before sending to Google.");
+    async runWebSearch() {
+      if (!this.croppedBase64) {
+        this.panel.setWebError("Select an area before searching the web.");
         return;
       }
-      const ImageUtils = await this.getImageUtils();
-      const base64 = await ImageUtils.blobToBase64(this.croppedBlob);
+      let WebSearchClient;
+      try {
+        WebSearchClient = await this.getWebClient();
+      } catch (error) {
+        this.panel.setWebError(
+          error?.message ||
+            "Add a Google Cloud Vision API key in settings to view web matches."
+        );
+        return;
+      }
+      this.panel.setWebLoading(true);
+      try {
+        const result = await WebSearchClient.searchWeb(this.croppedBase64);
+        this.panel.setWebResult(result);
+      } catch (error) {
+        console.error("Web search failed", error);
+        this.panel.setWebError(
+          error?.message || "Unable to fetch related web results."
+        );
+      } finally {
+        this.panel.setWebLoading(false);
+      }
+    }
+
+    async searchOnGoogle() {
+      if (!this.croppedBlob) {
+        this.panel.setAIError("Select an area before sending to Google.");
+        return;
+      }
+      if (!this.croppedBase64) {
+        const ImageUtils = await this.getImageUtils();
+        this.croppedBase64 = await ImageUtils.blobToBase64(this.croppedBlob);
+      }
       this.panel.setStatus("Opening Google Lens…");
       this.panel.setGoogleLoading(true);
       try {
         const response = await chrome.runtime.sendMessage({
           type: "SQUARE_SEARCH_GOOGLE_LENS",
-          payload: { imageBase64: base64 },
+          payload: { imageBase64: this.croppedBase64 },
         });
         if (!response?.success) {
           throw new Error(response?.error || "Google Lens search failed.");
@@ -517,7 +681,7 @@
         this.panel.setStatus("Google Lens opened in a new tab.");
       } catch (error) {
         console.error("Google Lens search failed", error);
-        this.panel.setError(
+        this.panel.setAIError(
           error?.message || "Failed to open Google Lens search."
         );
       } finally {
@@ -554,6 +718,16 @@
         this.modelClient = mod.default;
       }
       return this.modelClient;
+    }
+
+    async getWebClient() {
+      if (!this.webClient) {
+        const mod = await import(
+          chrome.runtime.getURL("src/config/webSearchClient.js")
+        );
+        this.webClient = mod.default;
+      }
+      return this.webClient;
     }
 
     async getStorage() {

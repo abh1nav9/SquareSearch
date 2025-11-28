@@ -4,6 +4,9 @@ import searchImageWithGemini from "./providers/gemini.js";
 export const DEFAULT_SETTINGS = {
   apiKey: "",
   model: "gemini-2.5-flash",
+  vision: {
+    apiKey: "",
+  },
 };
 
 class ModelClient {

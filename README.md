@@ -8,6 +8,7 @@ Square Search is a Manifest V3 Chrome extension that recreates a “circle-to-se
 - **Provider routing**: configurable Gemini Vision model + API key stored in `chrome.storage.sync`.
 - **Google Lens handoff**: optional “Search on Google” chip uploads the crop to lens.google.com in a new tab.
 - **Custom keyboard shortcuts**: default `Command+Shift+S` (macOS) / `Ctrl+Shift+S` (Windows/Linux) with per-OS overrides in the options page.
+- **Web tab (Cloud Vision)**: optional second tab calls Google Cloud Vision Web Detection to surface best-guess labels, matching pages, and web entities for the selection (requires a Vision API key). [Google Cloud Vision Web Detection](https://docs.cloud.google.com/vision/docs/detecting-web#vision_web_detection-python)
 - **Modern UI**: glassmorphic panel with collapsible handle, prompt refinements, loading states, and error messaging.
 
 ## Getting Started
@@ -20,16 +21,17 @@ The project is plain HTML/JS/CSS—no build step is required.
    - Enable “Developer mode”.
    - Click “Load unpacked” and choose the `/square` directory.
 
-3. **Configure Gemini**
+3. **Configure Gemini & Vision**
    - In the extension card, click “Details” → “Extension options”.
    - Enter your Gemini API key (e.g., from Google AI Studio) and desired model ID (`gemini-2.5-flash` by default).
+   - (Optional) Add a Google Cloud Vision API key to enable the Web tab’s Cloud Vision results.
    - Optionally adjust the keyboard shortcuts per platform.
 
 4. **Use Square Search**
    - Navigate to any regular webpage (not `chrome://` or other restricted schemes).
    - Click the toolbar icon **or** press the shortcut (`Cmd/Ctrl+Shift+S`).
-   - Drag to select an area; the side panel will appear with the crop preview, Gemini response, and controls.
-   - Use the “Search on Google” chip to open Lens results in a new tab if needed.
+   - Drag to select an area; the side panel will appear with the crop preview, Gemini (AI) tab, and the Web tab.
+   - Use the Web tab to inspect Cloud Vision matches, or the “Search on Google” chip to open Lens results in a new tab if needed.
 
 ## Customizing Shortcuts
 

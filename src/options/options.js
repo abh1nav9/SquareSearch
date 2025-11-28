@@ -22,6 +22,7 @@ class OptionsPageController {
     this.form = document.getElementById("settingsForm");
     this.apiKeyInput = document.getElementById("geminiKey");
     this.modelInput = document.getElementById("geminiModel");
+    this.visionKeyInput = document.getElementById("visionKey");
     this.statusNode = document.getElementById("statusText");
     this.shortcutInputs = {
       mac: document.getElementById("shortcutMac"),
@@ -51,6 +52,10 @@ class OptionsPageController {
     };
     this.apiKeyInput.value = stored.apiKey || "";
     this.modelInput.value = stored.model || DEFAULT_SETTINGS.model;
+    this.visionKeyInput.value =
+      stored.vision?.apiKey ||
+      stored.visionApiKey ||
+      DEFAULT_SETTINGS.vision.apiKey;
     SHORTCUT_OS_KEYS.forEach((key) => {
       if (this.shortcutInputs[key]) {
         this.shortcutInputs[key].value =
@@ -69,6 +74,9 @@ class OptionsPageController {
     const payload = {
       apiKey,
       model: this.modelInput.value.trim() || DEFAULT_SETTINGS.model,
+      vision: {
+        apiKey: this.visionKeyInput.value.trim(),
+      },
     };
     const shortcutPayload = this.buildShortcutPayload();
     await Promise.all([
