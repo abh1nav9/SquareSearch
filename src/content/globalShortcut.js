@@ -122,7 +122,14 @@ const init = async () => {
         return;
       }
       if (matchesShortcut(event, shortcutShape)) {
-        chrome.runtime.sendMessage({ type: "SQUARE_SEARCH_TRIGGER" });
+        const selection =
+          window.getSelection && window.getSelection().toString();
+        chrome.runtime.sendMessage({
+          type: "SQUARE_SEARCH_TRIGGER",
+          payload: {
+            selectionText: selection ? selection.trim() : "",
+          },
+        });
         event.preventDefault();
       }
     },

@@ -200,6 +200,9 @@
       this.tabButtons = {};
       this.activeTab = "ai";
       this.closeButton = null;
+      this.themeButton = null;
+      this.theme = "light";
+      this.themeChangeListener = null;
       this.objectUrl = null;
       this.isVisible = false;
       this.isCollapsed = false;
@@ -220,6 +223,11 @@
       const title = document.createElement("div");
       title.className = "square-search-panel__title";
       title.textContent = "Square Search";
+      this.themeButton = document.createElement("button");
+      this.themeButton.className =
+        "square-search-panel__icon-btn square-search-panel__icon-btn--theme";
+      this.themeButton.type = "button";
+      this.themeButton.addEventListener("click", () => this.toggleTheme());
       this.closeButton = document.createElement("button");
       this.closeButton.className =
         "square-search-panel__icon-btn square-search-panel__icon-btn--ghost";
@@ -228,9 +236,13 @@
       this.closeButton.setAttribute("aria-label", "Close Square Search");
       this.closeButton.addEventListener("click", () => this.close());
 
+      const iconGroup = document.createElement("div");
+      iconGroup.className = "square-search-panel__icon-group";
+      iconGroup.append(this.themeButton, this.closeButton);
+
       header.appendChild(this.collapseButton);
       header.appendChild(title);
-      header.appendChild(this.closeButton);
+      header.appendChild(iconGroup);
 
       const body = document.createElement("div");
       body.className = "square-search-panel__body";
@@ -258,6 +270,17 @@
       this.statusEl = document.createElement("div");
       this.statusEl.className = "square-search-panel__status";
       this.statusEl.textContent = "Select an area to begin.";
+
+      const selectionSection = document.createElement("div");
+      selectionSection.className = "square-search-panel__selection";
+      const selectionTitle = document.createElement("div");
+      selectionTitle.className = "square-search-panel__selection-label";
+      selectionTitle.textContent = "Selected text";
+      this.selectionPreview = document.createElement("pre");
+      this.selectionPreview.className = "square-search-panel__selection-preview";
+      this.selectionPreview.textContent =
+        "Highlight text and press the shortcut to search without capturing.";
+      selectionSection.append(selectionTitle, this.selectionPreview);
 
       const tabs = document.createElement("div");
       tabs.className = "square-search-panel__tabs";
@@ -301,6 +324,7 @@
       body.append(
         previewContainer,
         previewActions,
+        selectionSection,
         this.statusEl,
         tabs,
         resultsContainer,
@@ -312,6 +336,8 @@
       document.body.appendChild(this.root);
       this.setActiveTab("ai");
       this.updateToggleLabel();
+      this.initializeTheme();
+      this.subscribeThemeChanges();
     }
 
     open() {
@@ -372,6 +398,77 @@
         this.resultWebEl.classList.toggle("is-inactive", key !== "web");
         this.resultWebEl.classList.toggle("is-active", key === "web");
       }
+    }
+
+    async initializeTheme() {
+      try {
+        const { uiPreferences } = await chrome.storage.sync.get(
+          "uiPreferences"
+        );
+        const theme = uiPreferences?.theme || "light";
+        this.applyTheme(theme);
+      } catch (error) {
+        console.warn("Square Search: failed to load theme.", error);
+        this.applyTheme("light");
+      }
+    }
+
+    applyTheme(theme) {
+      this.theme = theme === "dark" ? "dark" : "light";
+      document.documentElement.classList.toggle(
+        "square-search-theme-dark",
+        this.theme === "dark"
+      );
+      if (this.root) {
+        this.root.classList.toggle(
+          "square-search-panel--theme-dark",
+          this.theme === "dark"
+        );
+      }
+      if (this.themeButton) {
+        this.themeButton.textContent = this.theme === "dark" ? "☾" : "☀";
+        this.themeButton.setAttribute(
+          "aria-label",
+          this.theme === "dark"
+            ? "Switch to light theme"
+            : "Switch to dark theme"
+        );
+      }
+    }
+
+    async toggleTheme() {
+      const next = this.theme === "dark" ? "light" : "dark";
+      this.applyTheme(next);
+      try {
+        await this.persistTheme(next);
+      } catch (error) {
+        console.warn("Square Search: failed to persist theme.", error);
+      }
+    }
+
+    async persistTheme(theme) {
+      const { uiPreferences } = await chrome.storage.sync.get(
+        "uiPreferences"
+      );
+      await chrome.storage.sync.set({
+        uiPreferences: { ...(uiPreferences || {}), theme },
+      });
+    }
+
+    subscribeThemeChanges() {
+      if (this.themeChangeListener) {
+        return;
+      }
+      this.themeChangeListener = (changes, area) => {
+        if (area !== "sync" || !changes.uiPreferences) {
+          return;
+        }
+        const nextTheme = changes.uiPreferences.newValue?.theme;
+        if (nextTheme && nextTheme !== this.theme) {
+          this.applyTheme(nextTheme);
+        }
+      };
+      chrome.storage.onChanged.addListener(this.themeChangeListener);
     }
 
     setAIResult(message) {
@@ -442,7 +539,7 @@
         );
       }
       if (!sections.length) {
-        this.resultWebEl.textContent = "No related web matches found.";
+        this.setWebInfo("No related web matches found.");
         return;
       }
       this.resultWebEl.innerHTML = sections.join("");
@@ -493,6 +590,39 @@
       return this.promptInput.value.trim();
     }
 
+    getSelectionPreview() {
+      return this.selectionPreview?.dataset?.text || "";
+    }
+
+    setPromptValue(value) {
+      this.promptInput.value = value || "";
+    }
+
+    setSelectionPreview(text) {
+      if (!this.selectionPreview) {
+        return;
+      }
+      const cleaned = text?.trim();
+      if (cleaned) {
+        this.selectionPreview.textContent = cleaned;
+        this.selectionPreview.dataset.text = cleaned;
+        this.selectionPreview.classList.add("has-content");
+      } else {
+        this.selectionPreview.textContent =
+          "Highlight text and press the shortcut to search without capturing.";
+        delete this.selectionPreview.dataset.text;
+        this.selectionPreview.classList.remove("has-content");
+      }
+    }
+
+    setWebInfo(message) {
+      if (!this.resultWebEl) {
+        return;
+      }
+      this.resultWebEl.classList.remove("is-error", "is-loading");
+      this.resultWebEl.textContent = message;
+    }
+
     setLoading(isLoading) {
       this.runButton.disabled = isLoading;
       this.root.classList.toggle("square-search-panel--loading", isLoading);
@@ -534,17 +664,45 @@
       this.modelClient = null;
       this.webClient = null;
       this.storage = null;
+      this.currentMode = "image";
       this.registerMessageHandlers();
       this.panel.onRun((prompt) => this.runSearch(prompt));
       this.panel.onGoogleSearch(() => this.searchOnGoogle());
     }
 
     startSelection() {
+      this.currentMode = "image";
+      this.croppedBlob = null;
+      this.croppedBase64 = null;
+      this.panel.open();
+      this.panel.setActiveTab("ai");
+      this.panel.setPromptValue("");
+      this.panel.setSelectionPreview("");
+      this.panel.setGoogleAvailable(false);
+      this.panel.setStatus("Select an area to begin.");
+      this.panel.setWebInfo(
+        "Web results will appear after you capture an area."
+      );
       this.overlay = new SelectionOverlay((region) =>
         this.handleRegion(region)
       );
       this.overlay.start();
+    }
+
+    startTextMode(selectedText) {
+      const cleaned = selectedText?.trim() || "";
+      this.currentMode = "text";
+      this.croppedBlob = null;
+      this.croppedBase64 = null;
       this.panel.open();
+      this.panel.setActiveTab("ai");
+      this.panel.setPromptValue("");
+      this.panel.setGoogleAvailable(false);
+      this.panel.setWebInfo(
+        "Web results are only available after capturing an area."
+      );
+      this.panel.setSelectionPreview(cleaned);
+      this.panel.setStatus("Add a prompt to search with Gemini.");
     }
 
     async handleRegion(region) {
@@ -577,6 +735,15 @@
               "Something went wrong while preparing the image."
             );
           });
+          return true;
+        }
+        if (message?.type === "SQUARE_SEARCH_START_CAPTURE") {
+          this.startSelection();
+          return true;
+        }
+        if (message?.type === "SQUARE_SEARCH_TEXT_MODE") {
+          this.startTextMode(message?.payload?.text || "");
+          return true;
         }
       });
     }
@@ -598,6 +765,7 @@
       this.croppedBase64 = await ImageUtils.blobToBase64(this.croppedBlob);
       await storage.removeLocal(["capturedImage", "capturedRegion"]);
       await this.panel.setPreview(this.croppedBlob);
+      this.panel.setSelectionPreview("");
       this.panel.setStatus("Ask anything about this selection.");
       this.panel.setGoogleAvailable(true);
       await this.runSearch(this.panel.getPrompt());
@@ -605,20 +773,30 @@
     }
 
     async runSearch(promptText) {
-      if (!this.croppedBlob) {
-        this.panel.setAIError("Select an area before running a search.");
-        return;
-      }
+      const prompt = (promptText || "").trim();
       const ModelClient = await this.getModelClient();
       this.panel.setLoading(true);
       this.panel.setStatus("Thinking with Gemini…");
       try {
-        const result = await ModelClient.searchImage(
-          this.croppedBlob,
-          promptText
-        );
+        let result;
+        if (this.currentMode === "text") {
+          if (!prompt) {
+            this.panel.setLoading(false);
+            this.panel.setAIError("Enter a prompt to search with Gemini.");
+            return;
+          }
+          result = await ModelClient.searchText({
+            prompt,
+            context: this.panel.getSelectionPreview(),
+          });
+        } else {
+          if (!this.croppedBlob) {
+            throw new Error("Select an area before running a search.");
+          }
+          result = await ModelClient.searchImage(this.croppedBlob, prompt);
+        }
         const answer =
-          result?.text?.trim() || "No details were returned for this area.";
+          result?.text?.trim() || "No details were returned for this request.";
         this.panel.setAIResult(answer);
         this.panel.setStatus("Result updated.");
       } catch (error) {
@@ -631,6 +809,12 @@
     }
 
     async runWebSearch() {
+      if (this.currentMode !== "image") {
+        this.panel.setWebInfo(
+          "Capture an area to view related web results."
+        );
+        return;
+      }
       if (!this.croppedBase64) {
         this.panel.setWebError("Select an area before searching the web.");
         return;
@@ -660,6 +844,12 @@
     }
 
     async searchOnGoogle() {
+      if (this.currentMode !== "image") {
+        this.panel.setAIError(
+          "Capture an area before opening Google Lens."
+        );
+        return;
+      }
       if (!this.croppedBlob) {
         this.panel.setAIError("Select an area before sending to Google.");
         return;
@@ -739,6 +929,7 @@
     }
   }
 
-  window[APP_KEY] = new SquareSearchApp();
-  window[APP_KEY].startSelection();
+  if (!window[APP_KEY]) {
+    window[APP_KEY] = new SquareSearchApp();
+  }
 })();

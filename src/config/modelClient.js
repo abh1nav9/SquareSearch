@@ -1,5 +1,7 @@
 import StorageService from "../utils/storage.js";
-import searchImageWithGemini from "./providers/gemini.js";
+import searchImageWithGemini, {
+  searchTextWithGemini,
+} from "./providers/gemini.js";
 
 export const DEFAULT_SETTINGS = {
   apiKey: "",
@@ -23,6 +25,21 @@ class ModelClient {
       );
     }
     return searchImageWithGemini(imageBlob, promptText, settings);
+  }
+
+  static async searchText({ prompt, context }) {
+    const stored =
+      (await StorageService.getSync("modelSettings")) || DEFAULT_SETTINGS;
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      ...stored,
+    };
+    if (!settings.apiKey) {
+      throw new Error(
+        "No Gemini API key set. Please configure it in settings."
+      );
+    }
+    return searchTextWithGemini({ prompt, context }, settings);
   }
 }
 

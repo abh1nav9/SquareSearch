@@ -39,7 +39,10 @@ class BackgroundController {
         return true;
       }
       if (message?.type === "SQUARE_SEARCH_TRIGGER") {
-        this.triggerFromActiveTab(sender?.tab)
+        this.triggerFromActiveTab(
+          sender?.tab,
+          message?.payload?.selectionText
+        )
           .then(() => sendResponse({ success: true }))
           .catch((error) => {
             console.error("Content shortcut failed", error);
@@ -70,6 +73,9 @@ class BackgroundController {
       return;
     }
     await this.injectOverlayScript(tab.id);
+    await this.sendPanelCommand(tab.id, {
+      type: "SQUARE_SEARCH_START_CAPTURE",
+    });
   }
 
   async injectOverlayScript(tabId) {
@@ -202,19 +208,23 @@ class BackgroundController {
     });
   }
 
-  async triggerFromActiveTab(senderTab) {
-    if (senderTab?.id) {
-      await this.handleActionClick(senderTab);
+  async triggerFromActiveTab(senderTab, selectionText) {
+    const tab =
+      senderTab?.id && senderTab
+        ? senderTab
+        : await this.queryActiveTab();
+    if (!tab?.id) {
+      console.warn("Square Search: No active tab for shortcut trigger.");
       return;
     }
-    const [activeTab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
-    if (activeTab) {
-      await this.handleActionClick(activeTab);
+    let text = (selectionText || "").trim();
+    if (!text && this.isInjectableUrl(tab.url)) {
+      text = (await this.fetchSelectionText(tab.id)).trim();
+    }
+    if (text) {
+      await this.startTextSearch(tab, text);
     } else {
-      console.warn("Square Search: No active tab for shortcut trigger.");
+      await this.handleActionClick(tab);
     }
   }
 
@@ -225,6 +235,56 @@ class BackgroundController {
         ...DEFAULT_SHORTCUTS,
       });
     }
+  }
+
+  async startTextSearch(tab, text) {
+    if (!tab?.id) {
+      return;
+    }
+    if (!this.isInjectableUrl(tab.url)) {
+      console.warn("Text search blocked on this URL.", tab.url);
+      return;
+    }
+    await this.injectOverlayScript(tab.id);
+    await this.sendPanelCommand(tab.id, {
+      type: "SQUARE_SEARCH_TEXT_MODE",
+      payload: { text },
+    });
+  }
+
+  async sendPanelCommand(tabId, message, retry = true) {
+    try {
+      await chrome.tabs.sendMessage(tabId, message);
+    } catch (error) {
+      if (retry) {
+        setTimeout(() => {
+          this.sendPanelCommand(tabId, message, false);
+        }, 150);
+      } else {
+        console.warn("Unable to communicate with Square Search panel.", error);
+      }
+    }
+  }
+
+  async fetchSelectionText(tabId) {
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => window.getSelection()?.toString() || "",
+      });
+      return result?.result || "";
+    } catch (error) {
+      console.warn("Failed to read selection text.", error);
+      return "";
+    }
+  }
+
+  async queryActiveTab() {
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    return activeTab;
   }
 }
 

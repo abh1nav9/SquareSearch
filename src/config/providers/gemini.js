@@ -34,9 +34,40 @@ class GeminiProvider {
       extra: {},
     };
   }
+
+  static async sendText({ prompt, context }, geminiSettings) {
+    const model = geminiSettings.model || "gemini-2.5-flash";
+    const ai = new GoogleGenAI({ apiKey: geminiSettings.apiKey });
+    const response = await ai.models.generateContent({
+      model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: context
+                ? `Selection:\n"${context}"\n\nPrompt:\n${prompt}`
+                : prompt ||
+                  "Provide insights about this selected text.",
+            },
+          ],
+        },
+      ],
+    });
+    return {
+      provider: "gemini",
+      text: response.text || "No response text returned.",
+      raw: response,
+      extra: {},
+    };
+  }
 }
 
 const searchImageWithGemini = (imageBlob, promptText, geminiSettings) =>
   GeminiProvider.send(imageBlob, promptText, geminiSettings);
 
+const searchTextWithGemini = (args, geminiSettings) =>
+  GeminiProvider.sendText(args, geminiSettings);
+
+export { searchTextWithGemini };
 export default searchImageWithGemini;

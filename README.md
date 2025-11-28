@@ -5,11 +5,12 @@ Square Search is a Manifest V3 Chrome extension that recreates a “circle-to-se
 ## Features
 
 - **Inline capture & answers**: draw a selection overlay and view the cropped image plus Gemini’s markdown-formatted response directly inside the page.
-- **Provider routing**: configurable Gemini Vision model + API key stored in `chrome.storage.sync`.
+- **Provider routing**: configurable Gemini model + API key stored in `chrome.storage.sync`.
 - **Google Lens handoff**: optional “Search on Google” chip uploads the crop to lens.google.com in a new tab.
 - **Custom keyboard shortcuts**: default `Command+Shift+S` (macOS) / `Ctrl+Shift+S` (Windows/Linux) with per-OS overrides in the options page.
+- **Theme toggles**: built-in light/dark switcher stored in sync so the panel matches your preference everywhere.
 - **Web tab (Cloud Vision)**: optional second tab calls Google Cloud Vision Web Detection to surface best-guess labels, matching pages, and web entities for the selection (requires a Vision API key). [Google Cloud Vision Web Detection](https://docs.cloud.google.com/vision/docs/detecting-web#vision_web_detection-python)
-- **Modern UI**: glassmorphic panel with collapsible handle, prompt refinements, loading states, and error messaging.
+- **Modern UI**: clean, minimalist panel with collapsible handle, prompt refinements, loading states, and error messaging.
 
 ## Getting Started
 
