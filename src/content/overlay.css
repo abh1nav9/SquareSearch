@@ -44,6 +44,24 @@
   background: transparent;
 }
 
+.square-search-overlay__hint {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--sq-panel-card);
+  color: var(--sq-panel-text);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: 0 4px 12px var(--sq-panel-shadow);
+  border: 1px solid var(--sq-panel-border);
+  pointer-events: none;
+  z-index: 2147483647;
+  animation: square-search-fade 0.3s ease-out;
+}
+
 @keyframes square-search-fade {
   from {
     opacity: 0;
@@ -71,8 +89,7 @@
   transform: translateX(110%);
   opacity: 0;
   pointer-events: none;
-  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.25s ease;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
   font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
 }
 

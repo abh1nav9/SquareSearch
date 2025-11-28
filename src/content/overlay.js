@@ -6,8 +6,9 @@
   }
 
   class SelectionOverlay {
-    constructor(onComplete) {
+    constructor(onComplete, onCancel) {
       this.onComplete = onComplete;
+      this.onCancel = onCancel;
       this.overlay = null;
       this.frame = null;
       this.isDrawing = false;
@@ -27,6 +28,12 @@
       this.frame.className = "square-search-overlay__frame";
       this.frame.style.display = "none";
       this.overlay.appendChild(this.frame);
+
+      const hint = document.createElement("div");
+      hint.className = "square-search-overlay__hint";
+      hint.textContent = "Press ESC to cancel";
+      this.overlay.appendChild(hint);
+
       document.body.appendChild(this.overlay);
       this.bind();
     }
@@ -57,7 +64,7 @@
       };
       this.onKeyDown = (event) => {
         if (event.key === "Escape") {
-          this.dispose();
+          this.cancel();
         }
       };
       this.overlay.addEventListener("mousedown", this.onMouseDown);
@@ -91,6 +98,13 @@
         scrollX: window.scrollX,
         scrollY: window.scrollY,
       };
+    }
+
+    cancel() {
+      if (this.onCancel) {
+        this.onCancel();
+      }
+      this.dispose();
     }
 
     dispose() {
@@ -207,6 +221,7 @@
       this.isVisible = false;
       this.isCollapsed = false;
       this.runHandler = null;
+      this.closeHandler = null;
       this.build();
     }
 
@@ -277,7 +292,8 @@
       selectionTitle.className = "square-search-panel__selection-label";
       selectionTitle.textContent = "Selected text";
       this.selectionPreview = document.createElement("pre");
-      this.selectionPreview.className = "square-search-panel__selection-preview";
+      this.selectionPreview.className =
+        "square-search-panel__selection-preview";
       this.selectionPreview.textContent =
         "Highlight text and press the shortcut to search without capturing.";
       selectionSection.append(selectionTitle, this.selectionPreview);
@@ -447,9 +463,7 @@
     }
 
     async persistTheme(theme) {
-      const { uiPreferences } = await chrome.storage.sync.get(
-        "uiPreferences"
-      );
+      const { uiPreferences } = await chrome.storage.sync.get("uiPreferences");
       await chrome.storage.sync.set({
         uiPreferences: { ...(uiPreferences || {}), theme },
       });
@@ -477,8 +491,7 @@
       if (html) {
         this.resultAIEl.innerHTML = html;
       } else {
-        this.resultAIEl.textContent =
-          "No details were returned for this area.";
+        this.resultAIEl.textContent = "No details were returned for this area.";
       }
     }
 
@@ -518,7 +531,9 @@
           `<div class="square-search-panel__web-section"><h3>Pages with matches</h3><ul class="square-search-panel__web-list">${topPages
             .map(
               (page) =>
-                `<li><a href="${SidePanel.escapeAttr(page.url)}" target="_blank" rel="noopener noreferrer">${SidePanel.escapeHtml(
+                `<li><a href="${SidePanel.escapeAttr(
+                  page.url
+                )}" target="_blank" rel="noopener noreferrer">${SidePanel.escapeHtml(
                   page.title || page.url
                 )}</a></li>`
             )
@@ -531,9 +546,11 @@
           `<div class="square-search-panel__web-section"><h3>Web entities</h3><ul class="square-search-panel__web-list">${topEntities
             .map(
               (entity) =>
-                `<li>${SidePanel.escapeHtml(entity.description)}<span class="square-search-panel__web-meta">${Math.round(
-                  (entity.score || 0) * 100
-                ) / 100}</span></li>`
+                `<li>${SidePanel.escapeHtml(
+                  entity.description
+                )}<span class="square-search-panel__web-meta">${
+                  Math.round((entity.score || 0) * 100) / 100
+                }</span></li>`
             )
             .join("")}</ul></div>`
         );
@@ -571,6 +588,9 @@
       this.isVisible = false;
       this.root.classList.remove("square-search-panel--visible");
       this.root.classList.remove("square-search-panel--collapsed");
+      if (this.closeHandler) {
+        this.closeHandler();
+      }
     }
 
     async setPreview(blob) {
@@ -639,6 +659,10 @@
       this.googleHandler = handler;
     }
 
+    onClose(handler) {
+      this.closeHandler = handler;
+    }
+
     setGoogleAvailable(isAvailable) {
       if (this.googleButton) {
         this.googleButton.disabled = !isAvailable;
@@ -668,6 +692,7 @@
       this.registerMessageHandlers();
       this.panel.onRun((prompt) => this.runSearch(prompt));
       this.panel.onGoogleSearch(() => this.searchOnGoogle());
+      this.panel.onClose(() => this.quitExtension());
     }
 
     startSelection() {
@@ -683,10 +708,21 @@
       this.panel.setWebInfo(
         "Web results will appear after you capture an area."
       );
-      this.overlay = new SelectionOverlay((region) =>
-        this.handleRegion(region)
+      this.overlay = new SelectionOverlay(
+        (region) => this.handleRegion(region),
+        () => this.quitExtension()
       );
       this.overlay.start();
+    }
+
+    quitExtension() {
+      if (this.overlay) {
+        this.overlay.dispose();
+        this.overlay = null;
+      }
+      this.panel.close();
+      this.croppedBlob = null;
+      this.croppedBase64 = null;
     }
 
     startTextMode(selectedText) {
@@ -810,9 +846,7 @@
 
     async runWebSearch() {
       if (this.currentMode !== "image") {
-        this.panel.setWebInfo(
-          "Capture an area to view related web results."
-        );
+        this.panel.setWebInfo("Capture an area to view related web results.");
         return;
       }
       if (!this.croppedBase64) {
@@ -845,9 +879,7 @@
 
     async searchOnGoogle() {
       if (this.currentMode !== "image") {
-        this.panel.setAIError(
-          "Capture an area before opening Google Lens."
-        );
+        this.panel.setAIError("Capture an area before opening Google Lens.");
         return;
       }
       if (!this.croppedBlob) {
