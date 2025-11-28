@@ -32,6 +32,7 @@
   cursor: crosshair;
   z-index: 2147483646;
   animation: square-search-fade 0.2s ease-out;
+  transition: opacity 0.15s ease-out;
 }
 
 .square-search-overlay__frame {

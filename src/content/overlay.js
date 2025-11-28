@@ -59,8 +59,12 @@
         }
         this.isDrawing = false;
         const region = this.buildRegion();
-        this.onComplete(region);
-        this.dispose();
+        if (region.width > 0 && region.height > 0) {
+          this.disable();
+          this.onComplete(region);
+        } else {
+          this.dispose();
+        }
       };
       this.onKeyDown = (event) => {
         if (event.key === "Escape") {
@@ -98,6 +102,17 @@
         scrollX: window.scrollX,
         scrollY: window.scrollY,
       };
+    }
+
+    disable() {
+      if (this.overlay) {
+        this.overlay.style.opacity = "0";
+        this.overlay.style.pointerEvents = "none";
+        this.frame.style.display = "none";
+      }
+      window.removeEventListener("mousemove", this.onMouseMove, true);
+      window.removeEventListener("mouseup", this.onMouseUp, true);
+      window.removeEventListener("keydown", this.onKeyDown, true);
     }
 
     cancel() {
@@ -206,6 +221,9 @@
       this.resultWebEl = null;
       this.statusEl = null;
       this.previewImg = null;
+      this.previewContainer = null;
+      this.previewActions = null;
+      this.selectionSection = null;
       this.promptInput = null;
       this.runButton = null;
       this.collapseButton = null;
@@ -263,12 +281,14 @@
       body.className = "square-search-panel__body";
 
       this.previewImg = document.createElement("img");
-      const previewContainer = document.createElement("div");
-      previewContainer.className = "square-search-panel__preview";
-      previewContainer.appendChild(this.previewImg);
+      this.previewContainer = document.createElement("div");
+      this.previewContainer.className = "square-search-panel__preview";
+      this.previewContainer.style.display = "none";
+      this.previewContainer.appendChild(this.previewImg);
 
-      const previewActions = document.createElement("div");
-      previewActions.className = "square-search-panel__preview-actions";
+      this.previewActions = document.createElement("div");
+      this.previewActions.className = "square-search-panel__preview-actions";
+      this.previewActions.style.display = "none";
       this.googleButton = document.createElement("button");
       this.googleButton.type = "button";
       this.googleButton.className =
@@ -280,14 +300,15 @@
           this.googleHandler();
         }
       });
-      previewActions.appendChild(this.googleButton);
+      this.previewActions.appendChild(this.googleButton);
 
       this.statusEl = document.createElement("div");
       this.statusEl.className = "square-search-panel__status";
       this.statusEl.textContent = "Select an area to begin.";
 
-      const selectionSection = document.createElement("div");
-      selectionSection.className = "square-search-panel__selection";
+      this.selectionSection = document.createElement("div");
+      this.selectionSection.className = "square-search-panel__selection";
+      this.selectionSection.style.display = "none";
       const selectionTitle = document.createElement("div");
       selectionTitle.className = "square-search-panel__selection-label";
       selectionTitle.textContent = "Selected text";
@@ -296,7 +317,7 @@
         "square-search-panel__selection-preview";
       this.selectionPreview.textContent =
         "Highlight text and press the shortcut to search without capturing.";
-      selectionSection.append(selectionTitle, this.selectionPreview);
+      this.selectionSection.append(selectionTitle, this.selectionPreview);
 
       const tabs = document.createElement("div");
       tabs.className = "square-search-panel__tabs";
@@ -338,9 +359,9 @@
       });
 
       body.append(
-        previewContainer,
-        previewActions,
-        selectionSection,
+        this.previewContainer,
+        this.previewActions,
+        this.selectionSection,
         this.statusEl,
         tabs,
         resultsContainer,
@@ -362,6 +383,7 @@
       this.root.classList.add("square-search-panel--visible");
       this.root.classList.remove("square-search-panel--collapsed");
       this.updateToggleLabel();
+      this.bindKeyHandlers();
     }
 
     toggle() {
@@ -588,8 +610,25 @@
       this.isVisible = false;
       this.root.classList.remove("square-search-panel--visible");
       this.root.classList.remove("square-search-panel--collapsed");
+      this.unbindKeyHandlers();
       if (this.closeHandler) {
         this.closeHandler();
+      }
+    }
+
+    bindKeyHandlers() {
+      this.onKeyDown = (event) => {
+        if (event.key === "Escape" && this.isVisible && !event.target.matches("textarea, input")) {
+          this.close();
+        }
+      };
+      window.addEventListener("keydown", this.onKeyDown, true);
+    }
+
+    unbindKeyHandlers() {
+      if (this.onKeyDown) {
+        window.removeEventListener("keydown", this.onKeyDown, true);
+        this.onKeyDown = null;
       }
     }
 
@@ -600,7 +639,19 @@
       }
       if (!blob) {
         this.previewImg.removeAttribute("src");
+        if (this.previewContainer) {
+          this.previewContainer.style.display = "none";
+        }
+        if (this.previewActions) {
+          this.previewActions.style.display = "none";
+        }
         return;
+      }
+      if (this.previewContainer) {
+        this.previewContainer.style.display = "flex";
+      }
+      if (this.previewActions) {
+        this.previewActions.style.display = "flex";
       }
       this.objectUrl = URL.createObjectURL(blob);
       this.previewImg.src = this.objectUrl;
@@ -619,15 +670,17 @@
     }
 
     setSelectionPreview(text) {
-      if (!this.selectionPreview) {
+      if (!this.selectionPreview || !this.selectionSection) {
         return;
       }
       const cleaned = text?.trim();
       if (cleaned) {
+        this.selectionSection.style.display = "flex";
         this.selectionPreview.textContent = cleaned;
         this.selectionPreview.dataset.text = cleaned;
         this.selectionPreview.classList.add("has-content");
       } else {
+        this.selectionSection.style.display = "none";
         this.selectionPreview.textContent =
           "Highlight text and press the shortcut to search without capturing.";
         delete this.selectionPreview.dataset.text;
@@ -702,6 +755,7 @@
       this.panel.open();
       this.panel.setActiveTab("ai");
       this.panel.setPromptValue("");
+      this.panel.setPreview(null);
       this.panel.setSelectionPreview("");
       this.panel.setGoogleAvailable(false);
       this.panel.setStatus("Select an area to begin.");
@@ -720,7 +774,10 @@
         this.overlay.dispose();
         this.overlay = null;
       }
-      this.panel.close();
+      this.panel.isVisible = false;
+      this.panel.root.classList.remove("square-search-panel--visible");
+      this.panel.root.classList.remove("square-search-panel--collapsed");
+      this.panel.unbindKeyHandlers();
       this.croppedBlob = null;
       this.croppedBase64 = null;
     }
@@ -733,6 +790,7 @@
       this.panel.open();
       this.panel.setActiveTab("ai");
       this.panel.setPromptValue("");
+      this.panel.setPreview(null);
       this.panel.setGoogleAvailable(false);
       this.panel.setWebInfo(
         "Web results are only available after capturing an area."
@@ -744,7 +802,15 @@
     async handleRegion(region) {
       if (!region || region.width === 0 || region.height === 0) {
         this.panel.setStatus("Selection cancelled.");
+        if (this.overlay) {
+          this.overlay.dispose();
+          this.overlay = null;
+        }
         return;
+      }
+      if (this.overlay) {
+        this.overlay.dispose();
+        this.overlay = null;
       }
       this.croppedBlob = null;
       this.croppedBase64 = null;
